@@ -297,6 +297,7 @@ with st.sidebar:
     sort_by         = "Name (A–Z)"
     hide_expansions = False
     avail_filter    = []
+    pub_filter      = []
     player_filter   = None
 
 # ── Main panel ────────────────────────────────────────────────────────────────
@@ -458,7 +459,15 @@ if st.session_state.games:
             mech_filter = []
             match_all   = False
 
-        # Row 4: Player count slider — only when player data exists
+        # Row 4: Publisher filter — only when publisher data exists
+        all_publishers = sorted(set(g["publisher"] for g in st.session_state.games if g.get("publisher")))
+        if all_publishers:
+            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Publisher</p>', unsafe_allow_html=True)
+            pub_filter = st.multiselect("Publisher", options=all_publishers, placeholder="Search publishers…", label_visibility="collapsed")
+        else:
+            pub_filter = []
+
+        # Row 5: Player count slider — only when player data exists
         all_mins = []
         all_maxs = []
         for g in st.session_state.games:
@@ -491,6 +500,8 @@ if st.session_state.games:
         games = [g for g in games if not st.session_state.expansion_map.get(g["id"], False)]
     if avail_filter and st.session_state.availability_map:
         games = [g for g in games if st.session_state.availability_map.get(g["id"]) in avail_filter]
+    if pub_filter:
+        games = [g for g in games if g.get("publisher") in pub_filter]
     if player_filter:
         pmin, pmax = player_filter
         def player_matches(g):
