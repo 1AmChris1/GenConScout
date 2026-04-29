@@ -258,6 +258,7 @@ with st.sidebar:
     sort_by         = "Name (A–Z)"
     hide_expansions = False
     avail_filter    = []
+    player_filter   = None
 
 # ── Main panel ────────────────────────────────────────────────────────────────
 st.markdown('<p class="hero-title">GENCON<br>GAME SCOUT</p>', unsafe_allow_html=True)
@@ -418,6 +419,31 @@ if st.session_state.games:
             mech_filter = []
             match_all   = False
 
+        # Row 4: Player count slider — only when player data exists
+        all_mins = []
+        all_maxs = []
+        for g in st.session_state.games:
+            p = g.get("players", "")
+            parts = str(p).replace("–", "-").split("-")
+            try:
+                all_mins.append(int(parts[0]))
+                all_maxs.append(int(parts[-1]))
+            except (ValueError, IndexError):
+                pass
+        if all_mins and all_maxs:
+            global_min = min(all_mins)
+            global_max = min(max(all_maxs), 10)  # cap at 10 for usability
+            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Player Count</p>', unsafe_allow_html=True)
+            player_filter = st.slider(
+                "Player count",
+                min_value=global_min,
+                max_value=global_max,
+                value=(global_min, global_max),
+                label_visibility="collapsed",
+            )
+        else:
+            player_filter = None
+
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
     if search:
@@ -426,6 +452,17 @@ if st.session_state.games:
         games = [g for g in games if not st.session_state.expansion_map.get(g["id"], False)]
     if avail_filter and st.session_state.availability_map:
         games = [g for g in games if st.session_state.availability_map.get(g["id"]) in avail_filter]
+    if player_filter:
+        pmin, pmax = player_filter
+        def player_matches(g):
+            parts = str(g.get("players","")).replace("–","-").split("-")
+            try:
+                gmin = int(parts[0])
+                gmax = int(parts[-1])
+                return gmax >= pmin and gmin <= pmax
+            except (ValueError, IndexError):
+                return True
+        games = [g for g in games if player_matches(g)]
     if mech_filter:
         if match_all:
             games = [g for g in games if all(m in g["mechanics"] for m in mech_filter)]
@@ -477,10 +514,12 @@ if st.session_state.games:
                 <div class="game-info">
                     <p class="game-title">{g['name']}</p>
                     <div class="game-meta">{year_badge}{players_badge}{expansion_badge}{map_link}</div>
-                    <p class="game-desc">{desc}</p>
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            if desc:
+                with st.expander("📖 Description"):
+                    st.markdown(f'<p class="game-desc">{desc}</p>', unsafe_allow_html=True)
 
 
 else:
