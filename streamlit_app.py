@@ -412,78 +412,81 @@ def load_games_from_ids(ids: list, title: str):
     st.session_state.all_mechanics = sorted(all_m)
     st.toast(f"Loaded {len(st.session_state.games)} games!", icon="✅")
 
-# ── Fetch: GeekList ───────────────────────────────────────────────────────────
-if fetch_btn:
-    list_id = parse_list_id(list_input or "")
-    if not list_id:
-        st.error("Please enter a valid GeekList ID or BGG URL.")
-    else:
-        with st.spinner("Fetching GeekList from BGG…"):
-            try:
-                gl  = fetch_geeklist(int(list_id), api_key=api_key)
-                st.session_state.location_map    = {}
-                st.session_state.expansion_map   = {}
-                st.session_state.availability_map = {}
-                load_games_from_ids(gl["item_ids"], gl["title"])
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-# ── Fetch: GeekPreview CSV ────────────────────────────────────────────────────
-if fetch_csv_btn:
-    if not csv_file:
-        st.error("Please upload a GeekPreview CSV file first.")
-    else:
-        try:
-            import pandas as pd
-            df = pd.read_csv(io.StringIO(csv_file.read().decode("utf-8", errors="replace")))
-
-            # Locate the BGG ID column — GeekPreview exports use 'BGGId'
-            id_col = None
-            for candidate in ["BGGId", "objectid", "objectID", "bggid", "ID", "id"]:
-                if candidate in df.columns:
-                    id_col = candidate
-                    break
-
-            if id_col is None:
-                st.error(f"Couldn't find a game ID column. Columns found: {list(df.columns)}")
-            else:
-                # Deduplicate by BGGId, keep first occurrence
-                df = df.drop_duplicates(subset=[id_col])
-
-                # Store expansion flags and availability: BGGId -> value
-                expansion_map    = {}
-                availability_map = {}
-                if "Type" in df.columns:
-                    for _, row in df.iterrows():
-                        gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
-                        if gid:
-                            expansion_map[gid] = str(row.get("Type", "")).strip().lower() == "expansion"
-                            avail = str(row.get("Availability", "")).strip()
-                            if avail and avail.lower() != "nan":
-                                availability_map[gid] = avail
-                st.session_state.expansion_map    = expansion_map
-                st.session_state.availability_map = availability_map
-
-                # Build location lookup: BGGId -> first numeric booth number from Location
-                location_map = {}
-                if "Location" in df.columns:
-                    for _, row in df.iterrows():
-                        gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
-                        loc = str(row.get("Location", "")) if pd.notna(row.get("Location")) else ""
-                        # Extract first run of digits from the location string
-                        booth_match = re.search(r'(\d+)', loc)
-                        if gid and booth_match:
-                            location_map[gid] = booth_match.group(1)
-                st.session_state.location_map = location_map
-
-                ids = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                title = csv_title.strip() or csv_file.name.replace(".csv", "").replace("_", " ").replace("-", " ")
-                load_games_from_ids(ids, title)
-        except Exception as e:
-            st.error(f"Error reading CSV: {e}")
-
-# ── Display ───────────────────────────────────────────────────────────────────
 with tab_browse:
+    # ── Fetch: GeekList ───────────────────────────────────────────────────────────
+    if fetch_btn:
+        list_id = parse_list_id(list_input or "")
+        if not list_id:
+            st.error("Please enter a valid GeekList ID or BGG URL.")
+        else:
+            with st.spinner("Fetching GeekList from BGG…"):
+                try:
+                    gl  = fetch_geeklist(int(list_id), api_key=api_key)
+                    st.session_state.location_map    = {}
+                    st.session_state.expansion_map   = {}
+                    st.session_state.availability_map = {}
+                    load_games_from_ids(gl["item_ids"], gl["title"])
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # ── Fetch: GeekPreview CSV ────────────────────────────────────────────────────
+    if fetch_csv_btn:
+        if not csv_file:
+            st.error("Please upload a GeekPreview CSV file first.")
+        else:
+            try:
+                import pandas as pd
+                df = pd.read_csv(io.StringIO(csv_file.read().decode("utf-8", errors="replace")))
+
+                # Locate the BGG ID column — GeekPreview exports use 'BGGId'
+                id_col = None
+                for candidate in ["BGGId", "objectid", "objectID", "bggid", "ID", "id"]:
+                    if candidate in df.columns:
+                        id_col = candidate
+                        break
+
+                if id_col is None:
+                    st.error(f"Couldn't find a game ID column. Columns found: {list(df.columns)}")
+                else:
+                    # Deduplicate by BGGId, keep first occurrence
+                    df = df.drop_duplicates(subset=[id_col])
+
+                    # Store expansion flags and availability: BGGId -> value
+                    expansion_map    = {}
+                    availability_map = {}
+                    if "Type" in df.columns:
+                        for _, row in df.iterrows():
+                            gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
+                            if gid:
+                                expansion_map[gid] = str(row.get("Type", "")).strip().lower() == "expansion"
+                                avail = str(row.get("Availability", "")).strip()
+                                if avail and avail.lower() != "nan":
+                                    availability_map[gid] = avail
+                    st.session_state.expansion_map    = expansion_map
+                    st.session_state.availability_map = availability_map
+
+                    # Build location lookup: BGGId -> first numeric booth number from Location
+                    location_map = {}
+                    if "Location" in df.columns:
+                        for _, row in df.iterrows():
+                            gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
+                            loc = str(row.get("Location", "")) if pd.notna(row.get("Location")) else ""
+                            # Extract first run of digits from the location string
+                            booth_match = re.search(r'(\d+)', loc)
+                            if gid and booth_match:
+                                location_map[gid] = booth_match.group(1)
+                    st.session_state.location_map = location_map
+
+                    ids = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
+                    title = csv_title.strip() or csv_file.name.replace(".csv", "").replace("_", " ").replace("-", " ")
+                    load_games_from_ids(ids, title)
+            except Exception as e:
+                st.error(f"Error reading CSV: {e}")
+
+    # ── Tabs ─────────────────────────────────────────────────────────────────────
+    tab_browse, tab_favs = st.tabs(["🎲 Browse", "⭐ My Favorites"])
+
+    # ── Browse tab ────────────────────────────────────────────────────────────────
     if st.session_state.games:
         games = list(st.session_state.games)
 
@@ -687,7 +690,7 @@ with tab_browse:
         """, unsafe_allow_html=True)
 
 
-# ── Favorites Tab ─────────────────────────────────────────────────────────────
+    # ── Favorites Tab ─────────────────────────────────────────────────────────────
 with tab_favs:
     username  = st.session_state.username
     user_favs = get_user_favorites(username)
