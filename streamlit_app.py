@@ -385,15 +385,18 @@ with st.sidebar:
         fetch_btn = st.button("🎯  FETCH LIST", use_container_width=True)
 
     with sb_csv:
-        st.markdown(
-            '<p style="color:#7a839a;font-size:0.72rem;line-height:1.6;">'
-            'On BGG open your GeekPreview, scroll to the bottom and click '
-            '<strong style="color:#e8eaf0">Download as CSV</strong>, then upload it here.</p>',
-            unsafe_allow_html=True,
-        )
-        csv_file      = st.file_uploader("Upload GeekPreview CSV", type=["csv"])
-        csv_title_in  = st.text_input("Preview title (optional)", placeholder="e.g. GenCon 2025 Preview")
-        fetch_csv_btn = st.button("🎯  LOAD CSV", use_container_width=True)
+        csv_exists = os.path.exists("Gencon.csv")
+        if csv_exists:
+            st.markdown(
+                '<p style="color:#3ecf8e;font-size:0.72rem;line-height:1.6;">✅ <strong>Gencon.csv</strong> found in repo.</p>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<p style="color:#e05c1a;font-size:0.72rem;line-height:1.6;">⚠️ <strong>Gencon.csv</strong> not found. Add it to the root of your GitHub repo.</p>',
+                unsafe_allow_html=True,
+            )
+        fetch_csv_btn = st.button("🎯  LOAD GENCON.CSV", use_container_width=True, disabled=not csv_exists)
 
 # ── Main panel ────────────────────────────────────────────────────────────────
 st.markdown('<p class="hero-title">GENCON<br>GAME SCOUT</p>', unsafe_allow_html=True)
@@ -424,43 +427,40 @@ with tab_browse:
 
     # Handle CSV fetch
     if fetch_csv_btn:
-        if not csv_file:
-            st.error("Please upload a GeekPreview CSV file first.")
-        else:
-            try:
-                import pandas as pd
-                df     = pd.read_csv(io.StringIO(csv_file.read().decode("utf-8", errors="replace")))
-                id_col = next((c for c in ["BGGId","objectid","objectID","bggid","ID","id"] if c in df.columns), None)
-                if id_col is None:
-                    st.error(f"Couldn't find a game ID column. Columns: {list(df.columns)}")
-                else:
-                    df               = df.drop_duplicates(subset=[id_col])
-                    expansion_map    = {}
-                    availability_map = {}
-                    location_map     = {}
-                    for _, row in df.iterrows():
-                        gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
-                        if not gid:
-                            continue
-                        if "Type" in df.columns:
-                            expansion_map[gid] = str(row.get("Type","")).strip().lower() == "expansion"
-                        if "Availability" in df.columns:
-                            avail = str(row.get("Availability","")).strip()
-                            if avail and avail.lower() != "nan":
-                                availability_map[gid] = avail
-                        if "Location" in df.columns:
-                            loc = str(row.get("Location","")) if pd.notna(row.get("Location")) else ""
-                            m = re.search(r'(\d+)', loc)
-                            if m:
-                                location_map[gid] = m.group(1)
-                    st.session_state.expansion_map    = expansion_map
-                    st.session_state.availability_map = availability_map
-                    st.session_state.location_map     = location_map
-                    ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                    title = csv_title_in.strip() or csv_file.name.replace(".csv","").replace("_"," ").replace("-"," ")
-                    load_games_from_ids(ids, title, api_key)
-            except Exception as e:
-                st.error(f"Error reading CSV: {e}")
+        try:
+            import pandas as pd
+            df     = pd.read_csv("Gencon.csv")
+            id_col = next((c for c in ["BGGId","objectid","objectID","bggid","ID","id"] if c in df.columns), None)
+            if id_col is None:
+                st.error(f"Couldn't find a game ID column. Columns: {list(df.columns)}")
+            else:
+                df               = df.drop_duplicates(subset=[id_col])
+                expansion_map    = {}
+                availability_map = {}
+                location_map     = {}
+                for _, row in df.iterrows():
+                    gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
+                    if not gid:
+                        continue
+                    if "Type" in df.columns:
+                        expansion_map[gid] = str(row.get("Type","")).strip().lower() == "expansion"
+                    if "Availability" in df.columns:
+                        avail = str(row.get("Availability","")).strip()
+                        if avail and avail.lower() != "nan":
+                            availability_map[gid] = avail
+                    if "Location" in df.columns:
+                        loc = str(row.get("Location","")) if pd.notna(row.get("Location")) else ""
+                        m = re.search(r'(\d+)', loc)
+                        if m:
+                            location_map[gid] = m.group(1)
+                st.session_state.expansion_map    = expansion_map
+                st.session_state.availability_map = availability_map
+                st.session_state.location_map     = location_map
+                ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
+                title = "GenCon 2025 Preview"
+                load_games_from_ids(ids, title, api_key)
+        except Exception as e:
+            st.error(f"Error reading Gencon.csv: {e}")
 
     # Display games
     if st.session_state.games:
