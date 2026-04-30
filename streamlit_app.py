@@ -483,204 +483,245 @@ if fetch_csv_btn:
             st.error(f"Error reading CSV: {e}")
 
 # ── Display ───────────────────────────────────────────────────────────────────
-if st.session_state.games:
-    games = list(st.session_state.games)
+with tab_browse:
+    if st.session_state.games:
+        games = list(st.session_state.games)
 
-    # ── All filters in main panel ────────────────────────────────────────────
-    with st.container():
-        st.markdown(
-            '<p style="font-family:\'Bebas Neue\',sans-serif;font-size:1.1rem;'
-            'letter-spacing:2px;color:var(--muted);margin-bottom:0.5rem;">🔍 SEARCH &amp; FILTER</p>',
-            unsafe_allow_html=True,
-        )
-
-        # Row 1: Search + Sort + Favorites toggle — always shown
-        c_search, c_sort, c_fav = st.columns([3, 1, 1])
-        with c_search:
-            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Search</p>', unsafe_allow_html=True)
-            search = st.text_input("Search", placeholder="Game name…", label_visibility="collapsed")
-        with c_sort:
-            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Sort by</p>', unsafe_allow_html=True)
-            sort_by = st.selectbox("Sort by", ["Name (A–Z)", "Name (Z–A)", "Year (Newest)", "Year (Oldest)"], label_visibility="collapsed")
-        with c_fav:
-            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Favorites</p>', unsafe_allow_html=True)
-            show_favs_only = st.checkbox("⭐ Only", value=False, help="Show only your starred games")
-
-        # Row 2: Availability + Hide expansions — only when CSV data present
-        avail_options = sorted(set(st.session_state.availability_map.values()))
-        has_csv_filters = bool(avail_options or st.session_state.expansion_map)
-        if has_csv_filters:
-            c_avail, c_exp = st.columns([3, 1])
-            with c_avail:
-                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Availability</p>', unsafe_allow_html=True)
-                if avail_options:
-                    avail_filter = st.multiselect("Availability", options=avail_options, placeholder="All…", label_visibility="collapsed")
-                else:
-                    avail_filter = []
-                    st.markdown('<p style="color:var(--muted);font-size:0.8rem;padding-top:0.4rem;">—</p>', unsafe_allow_html=True)
-            with c_exp:
-                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Type</p>', unsafe_allow_html=True)
-                if st.session_state.expansion_map:
-                    hide_expansions = st.checkbox("Hide expansions", value=False)
-                else:
-                    hide_expansions = False
-        else:
-            avail_filter    = []
-
-        # Row 3: Mechanics — only when data present
-        if st.session_state.all_mechanics:
-            c_mech, c_toggle = st.columns([3, 1])
-            with c_mech:
-                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Mechanics</p>', unsafe_allow_html=True)
-                mech_filter = st.multiselect("Mechanics", options=sorted(st.session_state.all_mechanics), placeholder="Any mechanic…", label_visibility="collapsed")
-            with c_toggle:
-                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Match mode</p>', unsafe_allow_html=True)
-                match_all = st.toggle("Require ALL", value=False, help="ON = game must have every selected mechanic. OFF = any one.")
-        else:
-            mech_filter = []
-            match_all   = False
-
-        # Row 4: Publisher filter — only when publisher data exists
-        all_publishers = sorted(set(g["publisher"] for g in st.session_state.games if g.get("publisher")))
-        if all_publishers:
-            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Publisher</p>', unsafe_allow_html=True)
-            pub_filter = st.multiselect("Publisher", options=all_publishers, placeholder="Search publishers…", label_visibility="collapsed")
-        else:
-            pub_filter = []
-
-        # Row 5: Player count slider — only when player data exists
-        all_mins = []
-        all_maxs = []
-        for g in st.session_state.games:
-            p = g.get("players", "")
-            parts = str(p).replace("–", "-").split("-")
-            try:
-                all_mins.append(int(parts[0]))
-                all_maxs.append(int(parts[-1]))
-            except (ValueError, IndexError):
-                pass
-        if all_mins and all_maxs:
-            global_min = min(all_mins)
-            global_max = min(max(all_maxs), 10)  # cap at 10 for usability
-            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Player Count</p>', unsafe_allow_html=True)
-            player_filter = st.slider(
-                "Player count",
-                min_value=global_min,
-                max_value=global_max,
-                value=(global_min, global_max),
-                label_visibility="collapsed",
+        # ── All filters in main panel ────────────────────────────────────────────
+        with st.container():
+            st.markdown(
+                '<p style="font-family:\'Bebas Neue\',sans-serif;font-size:1.1rem;'
+                'letter-spacing:2px;color:var(--muted);margin-bottom:0.5rem;">🔍 SEARCH &amp; FILTER</p>',
+                unsafe_allow_html=True,
             )
+
+            # Row 1: Search + Sort + Favorites toggle — always shown
+            c_search, c_sort, c_fav = st.columns([3, 1, 1])
+            with c_search:
+                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Search</p>', unsafe_allow_html=True)
+                search = st.text_input("Search", placeholder="Game name…", label_visibility="collapsed")
+            with c_sort:
+                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Sort by</p>', unsafe_allow_html=True)
+                sort_by = st.selectbox("Sort by", ["Name (A–Z)", "Name (Z–A)", "Year (Newest)", "Year (Oldest)"], label_visibility="collapsed")
+            with c_fav:
+                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Favorites</p>', unsafe_allow_html=True)
+                show_favs_only = st.checkbox("⭐ Only", value=False, help="Show only your starred games")
+
+            # Row 2: Availability + Hide expansions — only when CSV data present
+            avail_options = sorted(set(st.session_state.availability_map.values()))
+            has_csv_filters = bool(avail_options or st.session_state.expansion_map)
+            if has_csv_filters:
+                c_avail, c_exp = st.columns([3, 1])
+                with c_avail:
+                    st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Availability</p>', unsafe_allow_html=True)
+                    if avail_options:
+                        avail_filter = st.multiselect("Availability", options=avail_options, placeholder="All…", label_visibility="collapsed")
+                    else:
+                        avail_filter = []
+                        st.markdown('<p style="color:var(--muted);font-size:0.8rem;padding-top:0.4rem;">—</p>', unsafe_allow_html=True)
+                with c_exp:
+                    st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Type</p>', unsafe_allow_html=True)
+                    if st.session_state.expansion_map:
+                        hide_expansions = st.checkbox("Hide expansions", value=False)
+                    else:
+                        hide_expansions = False
+            else:
+                avail_filter    = []
+
+            # Row 3: Mechanics — only when data present
+            if st.session_state.all_mechanics:
+                c_mech, c_toggle = st.columns([3, 1])
+                with c_mech:
+                    st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Mechanics</p>', unsafe_allow_html=True)
+                    mech_filter = st.multiselect("Mechanics", options=sorted(st.session_state.all_mechanics), placeholder="Any mechanic…", label_visibility="collapsed")
+                with c_toggle:
+                    st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Match mode</p>', unsafe_allow_html=True)
+                    match_all = st.toggle("Require ALL", value=False, help="ON = game must have every selected mechanic. OFF = any one.")
+            else:
+                mech_filter = []
+                match_all   = False
+
+            # Row 4: Publisher filter — only when publisher data exists
+            all_publishers = sorted(set(g["publisher"] for g in st.session_state.games if g.get("publisher")))
+            if all_publishers:
+                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Publisher</p>', unsafe_allow_html=True)
+                pub_filter = st.multiselect("Publisher", options=all_publishers, placeholder="Search publishers…", label_visibility="collapsed")
+            else:
+                pub_filter = []
+
+            # Row 5: Player count slider — only when player data exists
+            all_mins = []
+            all_maxs = []
+            for g in st.session_state.games:
+                p = g.get("players", "")
+                parts = str(p).replace("–", "-").split("-")
+                try:
+                    all_mins.append(int(parts[0]))
+                    all_maxs.append(int(parts[-1]))
+                except (ValueError, IndexError):
+                    pass
+            if all_mins and all_maxs:
+                global_min = min(all_mins)
+                global_max = min(max(all_maxs), 10)  # cap at 10 for usability
+                st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Player Count</p>', unsafe_allow_html=True)
+                player_filter = st.slider(
+                    "Player count",
+                    min_value=global_min,
+                    max_value=global_max,
+                    value=(global_min, global_max),
+                    label_visibility="collapsed",
+                )
+            else:
+                player_filter = None
+
+            st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+        user_favs = get_user_favorites(st.session_state.username)
+        fav_ids   = set(user_favs.keys())
+        if search:
+            games = [g for g in games if search.lower() in g["name"].lower()]
+        if show_favs_only:
+            games = [g for g in games if g["id"] in fav_ids]
+        if hide_expansions and st.session_state.expansion_map:
+            games = [g for g in games if not st.session_state.expansion_map.get(g["id"], False)]
+        if avail_filter and st.session_state.availability_map:
+            games = [g for g in games if st.session_state.availability_map.get(g["id"]) in avail_filter]
+        if pub_filter:
+            games = [g for g in games if g.get("publisher") in pub_filter]
+        if player_filter:
+            pmin, pmax = player_filter
+            def player_matches(g):
+                parts = str(g.get("players","")).replace("–","-").split("-")
+                try:
+                    gmin = int(parts[0])
+                    gmax = int(parts[-1])
+                    return gmax >= pmin and gmin <= pmax
+                except (ValueError, IndexError):
+                    return True
+            games = [g for g in games if player_matches(g)]
+        if mech_filter:
+            if match_all:
+                games = [g for g in games if all(m in g["mechanics"] for m in mech_filter)]
+            else:
+                games = [g for g in games if any(m in g["mechanics"] for m in mech_filter)]
+
+        def safe_year(g):
+            try: return int(g["year"])
+            except: return 0
+
+        if sort_by == "Name (A–Z)":
+            games = sorted(games, key=lambda g: g["name"].lower())
+        elif sort_by == "Name (Z–A)":
+            games = sorted(games, key=lambda g: g["name"].lower(), reverse=True)
+        elif sort_by == "Year (Newest)":
+            games = sorted(games, key=safe_year, reverse=True)
+        elif sort_by == "Year (Oldest)":
+            games = sorted(games, key=safe_year)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f'<div class="stat-box"><div class="stat-num">{len(st.session_state.games)}</div><div class="stat-label">Total Games</div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="stat-box"><div class="stat-num">{len(games)}</div><div class="stat-label">Showing</div></div>', unsafe_allow_html=True)
+
+        st.markdown(f"### {st.session_state.list_title}")
+        st.markdown(f"<p style='color:var(--muted);font-size:0.82rem;'>{len(games)} game{'s' if len(games)!=1 else ''} shown</p>", unsafe_allow_html=True)
+
+        if not games:
+            st.info("No games match your current filters.")
         else:
-            player_filter = None
+            for g in games:
+                thumb_html = (
+                    f'<img src="{g["thumbnail"]}" alt="{g["name"]}" loading="lazy">'
+                    if g["thumbnail"] else '<span class="no-thumb">🎲</span>'
+                )
+                year_badge      = f'<span class="badge badge-year">{g["year"]}</span>'           if g["year"] != "?" else ""
+                players_badge   = f'<span class="badge badge-players">👥 {g["players"]}</span>' if g["players"] else ""
+                expansion_badge = '<span class="badge badge-expansion">Expansion</span>' if st.session_state.expansion_map.get(g["id"]) else ""
+                publisher_badge = f'<span class="badge badge-publisher">🏢 {g["publisher"]}</span>' if g.get("publisher") else ""
+                desc = g["description"].replace("<","&lt;").replace(">","&gt;")
 
-        st.markdown('<hr class="divider">', unsafe_allow_html=True)
+                booth = st.session_state.location_map.get(g["id"])
+                map_url = f"https://www.gencon.com/map?lt=7.27529233637217&lg=25.55419921875&z=4&f=1&c=26&s={booth}" if booth else None
+                map_link = (f'<a href="{map_url}" target="_blank" class="badge badge-map">📍 Booth {booth}</a>') if map_url else ""
 
-    user_favs = get_user_favorites(st.session_state.username)
-    fav_ids   = set(user_favs.keys())
-    if search:
-        games = [g for g in games if search.lower() in g["name"].lower()]
-    if show_favs_only:
-        games = [g for g in games if g["id"] in fav_ids]
-    if hide_expansions and st.session_state.expansion_map:
-        games = [g for g in games if not st.session_state.expansion_map.get(g["id"], False)]
-    if avail_filter and st.session_state.availability_map:
-        games = [g for g in games if st.session_state.availability_map.get(g["id"]) in avail_filter]
-    if pub_filter:
-        games = [g for g in games if g.get("publisher") in pub_filter]
-    if player_filter:
-        pmin, pmax = player_filter
-        def player_matches(g):
-            parts = str(g.get("players","")).replace("–","-").split("-")
-            try:
-                gmin = int(parts[0])
-                gmax = int(parts[-1])
-                return gmax >= pmin and gmin <= pmax
-            except (ValueError, IndexError):
-                return True
-        games = [g for g in games if player_matches(g)]
-    if mech_filter:
-        if match_all:
-            games = [g for g in games if all(m in g["mechanics"] for m in mech_filter)]
-        else:
-            games = [g for g in games if any(m in g["mechanics"] for m in mech_filter)]
+                mech_tags_html = ""
+                if g.get("mechanics"):
+                    tags = "".join(f'<span class="mech-tag">{m}</span>' for m in g["mechanics"])
+                    mech_tags_html = f'<div class="tags-row">{tags}</div>'
 
-    def safe_year(g):
-        try: return int(g["year"])
-        except: return 0
+                # Outer card border wraps both the header row and the expander
+                st.markdown('<div class="game-card-outer">', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="game-card-inner">
+                    <div class="thumb-wrap">{thumb_html}</div>
+                    <div class="game-info">
+                        <p class="game-title">{g['name']}</p>
+                        <div class="game-meta">{year_badge}{players_badge}{publisher_badge}{expansion_badge}{map_link}</div>
+                        {mech_tags_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                # Star / favorite button
+                user_favs = get_user_favorites(st.session_state.username)
+                is_fav = g["id"] in user_favs
+                star_label = "★ Favorited" if is_fav else "☆ Add to Favorites"
+                star_style = "color:#f0a500;font-size:0.75rem;" if is_fav else "color:#7a839a;font-size:0.75rem;"
+                if st.button(star_label, key=f"fav_{g['id']}", help="Save to My Favorites"):
+                    toggle_favorite(st.session_state.username, g)
+                    st.rerun()
+                if desc:
+                    with st.expander("📖 Description"):
+                        st.markdown(f'<p class="game-desc">{desc}</p>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
-    if sort_by == "Name (A–Z)":
-        games = sorted(games, key=lambda g: g["name"].lower())
-    elif sort_by == "Name (Z–A)":
-        games = sorted(games, key=lambda g: g["name"].lower(), reverse=True)
-    elif sort_by == "Year (Newest)":
-        games = sorted(games, key=safe_year, reverse=True)
-    elif sort_by == "Year (Oldest)":
-        games = sorted(games, key=safe_year)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f'<div class="stat-box"><div class="stat-num">{len(st.session_state.games)}</div><div class="stat-label">Total Games</div></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="stat-box"><div class="stat-num">{len(games)}</div><div class="stat-label">Showing</div></div>', unsafe_allow_html=True)
-
-    st.markdown(f"### {st.session_state.list_title}")
-    st.markdown(f"<p style='color:var(--muted);font-size:0.82rem;'>{len(games)} game{'s' if len(games)!=1 else ''} shown</p>", unsafe_allow_html=True)
-
-    if not games:
-        st.info("No games match your current filters.")
     else:
-        for g in games:
-            thumb_html = (
-                f'<img src="{g["thumbnail"]}" alt="{g["name"]}" loading="lazy">'
-                if g["thumbnail"] else '<span class="no-thumb">🎲</span>'
-            )
-            year_badge      = f'<span class="badge badge-year">{g["year"]}</span>'           if g["year"] != "?" else ""
-            players_badge   = f'<span class="badge badge-players">👥 {g["players"]}</span>' if g["players"] else ""
-            expansion_badge = '<span class="badge badge-expansion">Expansion</span>' if st.session_state.expansion_map.get(g["id"]) else ""
-            publisher_badge = f'<span class="badge badge-publisher">🏢 {g["publisher"]}</span>' if g.get("publisher") else ""
-            desc = g["description"].replace("<","&lt;").replace(">","&gt;")
+        st.markdown("""
+        <div style="text-align:center;padding:4rem 2rem;color:var(--muted);">
+            <div style="font-size:5rem;margin-bottom:1rem;">🎲</div>
+            <p style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:3px;color:#e8eaf0;">READY TO SCOUT</p>
+            <p style="font-size:0.9rem;">Enter a BGG GeekList ID in the sidebar and hit <strong style="color:#f0a500">FETCH LIST</strong>.</p>
+            <p style="font-size:0.78rem;margin-top:1rem;">💡 Find a GenCon GeekList on <a href="https://boardgamegeek.com" target="_blank" style="color:#f0a500">boardgamegeek.com</a> and grab the ID from the URL.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-            booth = st.session_state.location_map.get(g["id"])
-            map_url = f"https://www.gencon.com/map?lt=7.27529233637217&lg=25.55419921875&z=4&f=1&c=26&s={booth}" if booth else None
-            map_link = (f'<a href="{map_url}" target="_blank" class="badge badge-map">📍 Booth {booth}</a>') if map_url else ""
 
+# ── Favorites Tab ─────────────────────────────────────────────────────────────
+with tab_favs:
+    username  = st.session_state.username
+    user_favs = get_user_favorites(username)
+    if not user_favs:
+        st.markdown("""
+        <div style="text-align:center;padding:4rem 2rem;color:var(--muted);">
+            <div style="font-size:4rem;margin-bottom:1rem;">⭐</div>
+            <p style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;letter-spacing:3px;color:#e8eaf0;">NO FAVORITES YET</p>
+            <p style="font-size:0.9rem;">Star games in the Browse tab to save them here.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"### ⭐ {username}'s Favorites &nbsp; <span style='color:var(--muted);font-size:0.9rem;font-family:DM Sans,sans-serif;font-weight:400;'>{len(user_favs)} games</span>", unsafe_allow_html=True)
+        for gid, g in user_favs.items():
+            thumb_html = f'<img src="{g["thumbnail"]}" loading="lazy">' if g.get("thumbnail") else '<span style="font-size:2rem">🎲</span>'
+            year_badge    = f'<span class="badge badge-year">{g["year"]}</span>'           if g.get("year","?") != "?" else ""
+            players_badge = f'<span class="badge badge-players">👥 {g["players"]}</span>' if g.get("players") else ""
+            pub_badge     = f'<span class="badge badge-publisher">🏢 {g["publisher"]}</span>' if g.get("publisher") else ""
             mech_tags_html = ""
             if g.get("mechanics"):
                 tags = "".join(f'<span class="mech-tag">{m}</span>' for m in g["mechanics"])
                 mech_tags_html = f'<div class="tags-row">{tags}</div>'
-
-            # Outer card border wraps both the header row and the expander
-            st.markdown('<div class="game-card-outer">', unsafe_allow_html=True)
             st.markdown(f"""
-            <div class="game-card-inner">
-                <div class="thumb-wrap">{thumb_html}</div>
-                <div class="game-info">
-                    <p class="game-title">{g['name']}</p>
-                    <div class="game-meta">{year_badge}{players_badge}{publisher_badge}{expansion_badge}{map_link}</div>
-                    {mech_tags_html}
+            <div class="game-card-outer">
+                <div class="game-card-inner">
+                    <div class="thumb-wrap">{thumb_html}</div>
+                    <div class="game-info">
+                        <p class="game-title">{g['name']}</p>
+                        <div class="game-meta">{year_badge}{players_badge}{pub_badge}</div>
+                        {mech_tags_html}
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            # Star / favorite button
-            user_favs = get_user_favorites(st.session_state.username)
-            is_fav = g["id"] in user_favs
-            star_label = "★ Favorited" if is_fav else "☆ Add to Favorites"
-            star_style = "color:#f0a500;font-size:0.75rem;" if is_fav else "color:#7a839a;font-size:0.75rem;"
-            if st.button(star_label, key=f"fav_{g['id']}", help="Save to My Favorites"):
-                toggle_favorite(st.session_state.username, g)
+            if st.button("★ Remove", key=f"unfav_{gid}", help="Remove from favorites"):
+                toggle_favorite(username, {"id": gid, "name": g["name"]})
                 st.rerun()
-            if desc:
-                with st.expander("📖 Description"):
-                    st.markdown(f'<p class="game-desc">{desc}</p>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-
-else:
-    st.markdown("""
-    <div style="text-align:center;padding:4rem 2rem;color:var(--muted);">
-        <div style="font-size:5rem;margin-bottom:1rem;">🎲</div>
-        <p style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:3px;color:#e8eaf0;">READY TO SCOUT</p>
-        <p style="font-size:0.9rem;">Enter a BGG GeekList ID in the sidebar and hit <strong style="color:#f0a500">FETCH LIST</strong>.</p>
-        <p style="font-size:0.78rem;margin-top:1rem;">💡 Find a GenCon GeekList on <a href="https://boardgamegeek.com" target="_blank" style="color:#f0a500">boardgamegeek.com</a> and grab the ID from the URL.</p>
-    </div>
-    """, unsafe_allow_html=True)
