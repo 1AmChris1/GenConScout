@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
 import time
+import hashlib, json, os, re, io
 
 st.set_page_config(
     page_title="GenCon Game Scout",
@@ -168,13 +169,92 @@ h1,h2,h3 { font-family: 'Bebas Neue', sans-serif !important; letter-spacing: 2px
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session state ─────────────────────────────────────────────────────────────
-if "games"         not in st.session_state: st.session_state.games         = []
-if "list_title"    not in st.session_state: st.session_state.list_title    = ""
-if "all_mechanics"  not in st.session_state: st.session_state.all_mechanics  = []
-if "location_map"   not in st.session_state: st.session_state.location_map   = {}
-if "expansion_map"  not in st.session_state: st.session_state.expansion_map  = {}
+# ── Game session state ────────────────────────────────────────────────────────
+if "games"            not in st.session_state: st.session_state.games            = []
+if "list_title"       not in st.session_state: st.session_state.list_title       = ""
+if "all_mechanics"    not in st.session_state: st.session_state.all_mechanics    = []
+if "location_map"     not in st.session_state: st.session_state.location_map     = {}
+if "expansion_map"    not in st.session_state: st.session_state.expansion_map    = {}
 if "availability_map" not in st.session_state: st.session_state.availability_map = {}
+
+# ── Auth & Favorites helpers ─────────────────────────────────────────────────
+FAVORITES_FILE = "favorites.json"
+
+def _hash(password: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), b"gencon-scout-salt", 260_000).hex()
+
+def check_credentials(username: str, password: str) -> bool:
+    users = st.secrets.get("users", {})
+    stored = users.get(username)
+    if not stored:
+        return False
+    return _hash(password) == stored
+
+def load_favorites() -> dict:
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_favorites(favs: dict):
+    with open(FAVORITES_FILE, "w") as f:
+        json.dump(favs, f)
+
+def toggle_favorite(username: str, game: dict):
+    favs = load_favorites()
+    user_favs = favs.get(username, {})
+    gid = game["id"]
+    if gid in user_favs:
+        del user_favs[gid]
+    else:
+        user_favs[gid] = {
+            "id": gid, "name": game["name"],
+            "thumbnail": game.get("thumbnail",""),
+            "year": game.get("year","?"),
+            "players": game.get("players",""),
+            "publisher": game.get("publisher",""),
+            "mechanics": game.get("mechanics",[]),
+        }
+    favs[username] = user_favs
+    save_favorites(favs)
+
+def get_user_favorites(username: str) -> dict:
+    return load_favorites().get(username, {})
+
+# ── Session state ─────────────────────────────────────────────────────────────
+if "authenticated"  not in st.session_state: st.session_state.authenticated  = False
+if "username"       not in st.session_state: st.session_state.username       = ""
+
+# ── Login gate ────────────────────────────────────────────────────────────────
+if not st.session_state.authenticated:
+    st.markdown("""
+    <style>
+    .login-wrap { max-width:380px; margin:6rem auto; text-align:center; }
+    .login-title { font-family:'Bebas Neue',sans-serif; font-size:3rem; letter-spacing:4px;
+        background:linear-gradient(135deg,#f0a500,#e05c1a);
+        -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .login-sub { color:#7a839a; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:2rem; }
+    </style>
+    """, unsafe_allow_html=True)
+    _, mid, _ = st.columns([1,2,1])
+    with mid:
+        st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
+        st.markdown('<p class="login-title">🎲 SCOUT</p>', unsafe_allow_html=True)
+        st.markdown('<p class="login-sub">GenCon Game Explorer</p>', unsafe_allow_html=True)
+        uname = st.text_input("Username", placeholder="Username", label_visibility="collapsed")
+        pw    = st.text_input("Password", placeholder="Password", type="password", label_visibility="collapsed", autocomplete="off")
+        if st.button("LOG IN", use_container_width=True):
+            if check_credentials(uname.strip(), pw):
+                st.session_state.authenticated = True
+                st.session_state.username      = uname.strip()
+                st.rerun()
+            else:
+                st.error("Invalid username or password.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
 
 # ── BGG API helpers ───────────────────────────────────────────────────────────
 
@@ -255,22 +335,18 @@ with st.sidebar:
         'GenCon Game Explorer</p>',
         unsafe_allow_html=True,
     )
-    st.markdown('<hr class="divider">', unsafe_allow_html=True)
-
-    st.markdown("### 🔑 BGG API Token")
-    api_key = st.text_input(
-        "Bearer Token",
-        type="password",
-        placeholder="Paste token — cleared when tab closes",
-        help="Your token is never saved anywhere. It only exists in memory for this browser session and is gone the moment you close the tab.",
-        key=None,
-        autocomplete="off",
-    )
     st.markdown(
-        '<p style="color:#7a839a;font-size:0.68rem;line-height:1.5;margin-top:-0.5rem;">'
-        '🔒 Not saved — paste each session</p>',
+        f'<p style="color:#3ecf8e;font-size:0.75rem;margin-top:-0.3rem;">👤 {st.session_state.username}</p>',
         unsafe_allow_html=True,
     )
+    if st.button("Log out", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.rerun()
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+    # BGG API key is read from st.secrets — not shown to users
+    api_key = st.secrets.get("BGG_API_KEY", "")
     tab_gl, tab_csv = st.tabs(["📋 GeekList", "📂 GeekPreview CSV"])
 
     with tab_gl:
@@ -299,14 +375,16 @@ with st.sidebar:
     avail_filter    = []
     pub_filter      = []
     player_filter   = None
+    show_favs_only  = False
 
 # ── Main panel ────────────────────────────────────────────────────────────────
 st.markdown('<p class="hero-title">GENCON<br>GAME SCOUT</p>', unsafe_allow_html=True)
 st.markdown('<p class="hero-sub">Browse Games from Any BGG GeekList</p>', unsafe_allow_html=True)
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
-import re, io
 
 def parse_list_id(raw: str):
     raw = raw.strip()
@@ -416,14 +494,17 @@ if st.session_state.games:
             unsafe_allow_html=True,
         )
 
-        # Row 1: Search + Sort — always shown
-        c_search, c_sort = st.columns([3, 1])
+        # Row 1: Search + Sort + Favorites toggle — always shown
+        c_search, c_sort, c_fav = st.columns([3, 1, 1])
         with c_search:
             st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Search</p>', unsafe_allow_html=True)
             search = st.text_input("Search", placeholder="Game name…", label_visibility="collapsed")
         with c_sort:
             st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Sort by</p>', unsafe_allow_html=True)
             sort_by = st.selectbox("Sort by", ["Name (A–Z)", "Name (Z–A)", "Year (Newest)", "Year (Oldest)"], label_visibility="collapsed")
+        with c_fav:
+            st.markdown('<p style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Favorites</p>', unsafe_allow_html=True)
+            show_favs_only = st.checkbox("⭐ Only", value=False, help="Show only your starred games")
 
         # Row 2: Availability + Hide expansions — only when CSV data present
         avail_options = sorted(set(st.session_state.availability_map.values()))
@@ -494,8 +575,12 @@ if st.session_state.games:
 
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
+    user_favs = get_user_favorites(st.session_state.username)
+    fav_ids   = set(user_favs.keys())
     if search:
         games = [g for g in games if search.lower() in g["name"].lower()]
+    if show_favs_only:
+        games = [g for g in games if g["id"] in fav_ids]
     if hide_expansions and st.session_state.expansion_map:
         games = [g for g in games if not st.session_state.expansion_map.get(g["id"], False)]
     if avail_filter and st.session_state.availability_map:
@@ -576,6 +661,14 @@ if st.session_state.games:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            # Star / favorite button
+            user_favs = get_user_favorites(st.session_state.username)
+            is_fav = g["id"] in user_favs
+            star_label = "★ Favorited" if is_fav else "☆ Add to Favorites"
+            star_style = "color:#f0a500;font-size:0.75rem;" if is_fav else "color:#7a839a;font-size:0.75rem;"
+            if st.button(star_label, key=f"fav_{g['id']}", help="Save to My Favorites"):
+                toggle_favorite(st.session_state.username, g)
+                st.rerun()
             if desc:
                 with st.expander("📖 Description"):
                     st.markdown(f'<p class="game-desc">{desc}</p>', unsafe_allow_html=True)
