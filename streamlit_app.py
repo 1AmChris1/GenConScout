@@ -320,6 +320,40 @@ def load_games_from_ids(ids: list, title: str, api_key: str):
     st.session_state.all_mechanics = sorted(all_m)
     st.toast(f"Loaded {len(st.session_state.games)} games!", icon="✅")
 
+def load_from_gencon_csv(api_key: str):
+    """Load games from Gencon.csv in the repo root. Returns True on success."""
+    import pandas as pd
+    df     = pd.read_csv("Gencon.csv")
+    id_col = next((c for c in ["BGGId","objectid","objectID","bggid","ID","id"] if c in df.columns), None)
+    if id_col is None:
+        st.error(f"Couldn't find a game ID column. Columns: {list(df.columns)}")
+        return False
+    df               = df.drop_duplicates(subset=[id_col])
+    expansion_map    = {}
+    availability_map = {}
+    location_map     = {}
+    for _, row in df.iterrows():
+        gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
+        if not gid:
+            continue
+        if "Type" in df.columns:
+            expansion_map[gid] = str(row.get("Type","")).strip().lower() == "expansion"
+        if "Availability" in df.columns:
+            avail = str(row.get("Availability","")).strip()
+            if avail and avail.lower() != "nan":
+                availability_map[gid] = avail
+        if "Location" in df.columns:
+            loc = str(row.get("Location","")) if pd.notna(row.get("Location")) else ""
+            m = re.search(r'(\d+)', loc)
+            if m:
+                location_map[gid] = m.group(1)
+    st.session_state.expansion_map    = expansion_map
+    st.session_state.availability_map = availability_map
+    st.session_state.location_map     = location_map
+    ids = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
+    load_games_from_ids(ids, "GenCon 2026 Preview", api_key)
+    return True
+
 def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, show_remove=False):
     thumb_html = (
         f'<img src="{g["thumbnail"]}" alt="{g["name"]}" loading="lazy">'
@@ -383,6 +417,7 @@ if "availability_map"  not in st.session_state: st.session_state.availability_ma
 if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = {}
 if "fav_ids_local"     not in st.session_state: st.session_state.fav_ids_local    = set()
 if "fav_ids_seeded"    not in st.session_state: st.session_state.fav_ids_seeded   = False
+if "auto_loaded"       not in st.session_state: st.session_state.auto_loaded      = False
 
 # ── Login gate ────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
@@ -467,6 +502,16 @@ st.markdown('<p class="hero-title">GENCON<br>GAME SCOUT</p>', unsafe_allow_html=
 st.markdown('<p class="hero-sub">Browse Games from Any BGG GeekList</p>', unsafe_allow_html=True)
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
+# Auto-load Gencon.csv once per session if it exists and nothing is loaded yet
+if (not st.session_state.games
+        and not st.session_state.get("auto_loaded", False)
+        and os.path.exists("Gencon.csv")):
+    st.session_state.auto_loaded = True
+    try:
+        load_from_gencon_csv(api_key)
+    except Exception as e:
+        st.warning(f"Could not auto-load Gencon.csv: {e}")
+
 # Tabs are defined here — before any content is rendered into them
 tab_browse, tab_favs = st.tabs(["🎲 Browse", "⭐ My Favorites"])
 
@@ -489,40 +534,10 @@ with tab_browse:
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-    # Handle CSV fetch
+    # Handle CSV fetch (manual button)
     if fetch_csv_btn:
         try:
-            import pandas as pd
-            df     = pd.read_csv("Gencon.csv")
-            id_col = next((c for c in ["BGGId","objectid","objectID","bggid","ID","id"] if c in df.columns), None)
-            if id_col is None:
-                st.error(f"Couldn't find a game ID column. Columns: {list(df.columns)}")
-            else:
-                df               = df.drop_duplicates(subset=[id_col])
-                expansion_map    = {}
-                availability_map = {}
-                location_map     = {}
-                for _, row in df.iterrows():
-                    gid = str(int(row[id_col])) if pd.notna(row[id_col]) else None
-                    if not gid:
-                        continue
-                    if "Type" in df.columns:
-                        expansion_map[gid] = str(row.get("Type","")).strip().lower() == "expansion"
-                    if "Availability" in df.columns:
-                        avail = str(row.get("Availability","")).strip()
-                        if avail and avail.lower() != "nan":
-                            availability_map[gid] = avail
-                    if "Location" in df.columns:
-                        loc = str(row.get("Location","")) if pd.notna(row.get("Location")) else ""
-                        m = re.search(r'(\d+)', loc)
-                        if m:
-                            location_map[gid] = m.group(1)
-                st.session_state.expansion_map    = expansion_map
-                st.session_state.availability_map = availability_map
-                st.session_state.location_map     = location_map
-                ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                title = "GenCon 2026 Preview"
-                load_games_from_ids(ids, title, api_key)
+            load_from_gencon_csv(api_key)
         except Exception as e:
             st.error(f"Error reading Gencon.csv: {e}")
 
