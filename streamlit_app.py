@@ -150,8 +150,11 @@ def check_credentials(username: str, password: str) -> bool:
 def _get_conn():
     return st.connection("gsheets", type=GSheetsConnection)
 
-def load_favorites() -> dict:
-    """Read all rows from the Favorites sheet and return as {username: {gid: {...}}}."""
+def load_favorites(force: bool = False) -> dict:
+    """Read all rows from the Favorites sheet and return as {username: {gid: {...}}}.
+    Results are cached in session_state so the UI stays snappy; pass force=True to re-read."""
+    if not force and "favorites_cache" in st.session_state:
+        return st.session_state.favorites_cache
     try:
         conn = _get_conn()
         df   = conn.read(worksheet="Favorites", ttl=0)
@@ -177,6 +180,7 @@ def load_favorites() -> dict:
                 "mechanics":   mechanics,
                 "description": str(row.get("description","")),
             }
+        st.session_state.favorites_cache = favs
         return favs
     except Exception:
         return {}
@@ -201,6 +205,8 @@ def save_favorites(favs: dict):
     df   = pd.DataFrame(rows, columns=["username","game_id","name","thumbnail","year","players","publisher","mechanics","description"])
     conn = _get_conn()
     conn.update(worksheet="Favorites", data=df)
+    # Bust the cache so next load_favorites() re-reads fresh data
+    st.session_state.pop("favorites_cache", None)
 
 def toggle_favorite(username: str, game: dict):
     favs      = load_favorites()
@@ -220,6 +226,8 @@ def toggle_favorite(username: str, game: dict):
             "description": game.get("description",""),
         }
     favs[username] = user_favs
+    # Update local cache immediately so the button label flips before rerun
+    st.session_state.favorites_cache = favs
     save_favorites(favs)
 
 def get_user_favorites(username: str) -> dict:
@@ -334,10 +342,15 @@ def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, sh
 
     if show_star:
         is_fav = g["id"] in fav_ids
-        label  = "★ Favorited" if is_fav else "☆ Add to Favorites"
-        if st.button(label, key=f"fav_{g['id']}", help="Toggle favorite"):
-            toggle_favorite(st.session_state.username, g)
-            st.rerun()
+        if is_fav:
+            # Show a disabled "★ Favorited" button — clicking it removes
+            if st.button("★ Favorited", key=f"fav_{g['id']}", help="Click to remove from favorites"):
+                toggle_favorite(st.session_state.username, g)
+                st.rerun()
+        else:
+            if st.button("☆ Add to Favorites", key=f"fav_{g['id']}", help="Save to My Favorites"):
+                toggle_favorite(st.session_state.username, g)
+                st.rerun()
 
     if show_remove:
         if st.button("★ Remove", key=f"unfav_{g['id']}", help="Remove from favorites"):
@@ -358,7 +371,8 @@ if "list_title"       not in st.session_state: st.session_state.list_title      
 if "all_mechanics"    not in st.session_state: st.session_state.all_mechanics    = []
 if "location_map"     not in st.session_state: st.session_state.location_map     = {}
 if "expansion_map"    not in st.session_state: st.session_state.expansion_map    = {}
-if "availability_map" not in st.session_state: st.session_state.availability_map = {}
+if "availability_map"  not in st.session_state: st.session_state.availability_map = {}
+if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = None
 
 # ── Login gate ────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
@@ -497,7 +511,7 @@ with tab_browse:
                 st.session_state.availability_map = availability_map
                 st.session_state.location_map     = location_map
                 ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                title = "GenCon 2026 Preview"
+                title = "GenCon 2025 Preview"
                 load_games_from_ids(ids, title, api_key)
         except Exception as e:
             st.error(f"Error reading Gencon.csv: {e}")
@@ -582,9 +596,12 @@ with tab_browse:
 
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
-        # Apply filters
+        # Apply filters — use cached favorites for instant button label update
         user_favs = get_user_favorites(st.session_state.username)
         fav_ids   = set(user_favs.keys())
+        # Warm the cache if not already loaded
+        if st.session_state.favorites_cache is None:
+            load_favorites(force=True)
 
         if search:
             games = [g for g in games if search.lower() in g["name"].lower()]
