@@ -231,14 +231,13 @@ def toggle_favorite(username: str, game: dict):
             "description": game.get("description",""),
         }
     favs[username] = user_favs
-    # Update local cache immediately so the button label flips before rerun
+    # Update session state BEFORE the slow Sheets write so rerun sees correct state
     st.session_state.favorites_cache = favs
-    # Update the instant fav_ids set so button label flips without waiting for Sheets
     if gid in st.session_state.fav_ids_local:
         st.session_state.fav_ids_local.discard(gid)
     else:
         st.session_state.fav_ids_local.add(gid)
-    save_favorites(favs)
+    save_favorites(favs)  # slow Sheets write happens after state is already updated
 
 def get_user_favorites(username: str) -> dict:
     return load_favorites().get(username, {})
@@ -356,10 +355,12 @@ def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, sh
         label  = "★ Favorited" if is_fav else "☆ Add to Favorites"
         if st.button(label, key=f"fav_{g['id']}"):
             toggle_favorite(st.session_state.username, g)
+            st.rerun()
 
     if show_remove:
         if st.button("★ Remove from Favorites", key=f"unfav_{g['id']}"):
             toggle_favorite(st.session_state.username, g)
+            st.rerun()
 
     if desc:
         with st.expander("📖 Description"):
