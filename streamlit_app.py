@@ -497,7 +497,7 @@ with tab_browse:
                 st.session_state.availability_map = availability_map
                 st.session_state.location_map     = location_map
                 ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                title = "GenCon 2025 Preview"
+                title = "GenCon 2026 Preview"
                 load_games_from_ids(ids, title, api_key)
         except Exception as e:
             st.error(f"Error reading Gencon.csv: {e}")
