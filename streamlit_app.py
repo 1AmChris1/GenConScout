@@ -153,7 +153,7 @@ def _get_conn():
 def load_favorites(force: bool = False) -> dict:
     """Read all rows from the Favorites sheet and return as {username: {gid: {...}}}.
     Results are cached in session_state so the UI stays snappy; pass force=True to re-read."""
-    if not force and "favorites_cache" in st.session_state:
+    if not force and st.session_state.get("favorites_cache"):
         return st.session_state.favorites_cache
     try:
         conn = _get_conn()
@@ -183,6 +183,7 @@ def load_favorites(force: bool = False) -> dict:
         st.session_state.favorites_cache = favs
         return favs
     except Exception:
+        st.session_state.favorites_cache = {}
         return {}
 
 def save_favorites(favs: dict):
@@ -372,7 +373,7 @@ if "all_mechanics"    not in st.session_state: st.session_state.all_mechanics   
 if "location_map"     not in st.session_state: st.session_state.location_map     = {}
 if "expansion_map"    not in st.session_state: st.session_state.expansion_map    = {}
 if "availability_map"  not in st.session_state: st.session_state.availability_map = {}
-if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = None
+if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = {}
 
 # ── Login gate ────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
@@ -599,9 +600,7 @@ with tab_browse:
         # Apply filters — use cached favorites for instant button label update
         user_favs = get_user_favorites(st.session_state.username)
         fav_ids   = set(user_favs.keys())
-        # Warm the cache if not already loaded
-        if st.session_state.favorites_cache is None:
-            load_favorites(force=True)
+
 
         if search:
             games = [g for g in games if search.lower() in g["name"].lower()]
