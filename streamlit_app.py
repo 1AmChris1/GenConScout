@@ -351,21 +351,15 @@ def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, sh
     """, unsafe_allow_html=True)
 
     if show_star:
-        is_fav = g["id"] in fav_ids
-        if is_fav:
-            # Show a disabled "★ Favorited" button — clicking it removes
-            if st.button("★ Favorited", key=f"fav_{g['id']}", help="Click to remove from favorites"):
-                toggle_favorite(st.session_state.username, g)
-                st.rerun()
-        else:
-            if st.button("☆ Add to Favorites", key=f"fav_{g['id']}", help="Save to My Favorites"):
-                toggle_favorite(st.session_state.username, g)
-                st.rerun()
+        # Always read directly from session_state so label is instant
+        is_fav = g["id"] in st.session_state.fav_ids_local
+        label  = "★ Favorited" if is_fav else "☆ Add to Favorites"
+        if st.button(label, key=f"fav_{g['id']}"):
+            toggle_favorite(st.session_state.username, g)
 
     if show_remove:
-        if st.button("★ Remove", key=f"unfav_{g['id']}", help="Remove from favorites"):
+        if st.button("★ Remove from Favorites", key=f"unfav_{g['id']}"):
             toggle_favorite(st.session_state.username, g)
-            st.rerun()
 
     if desc:
         with st.expander("📖 Description"):
@@ -522,7 +516,7 @@ with tab_browse:
                 st.session_state.availability_map = availability_map
                 st.session_state.location_map     = location_map
                 ids   = [str(int(v)) for v in pd.to_numeric(df[id_col], errors="coerce").dropna()]
-                title = "GenCon 2025 Preview"
+                title = "GenCon 2026 Preview"
                 load_games_from_ids(ids, title, api_key)
         except Exception as e:
             st.error(f"Error reading Gencon.csv: {e}")
