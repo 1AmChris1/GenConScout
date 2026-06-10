@@ -153,7 +153,7 @@ def _get_conn():
 def load_favorites(force: bool = False) -> dict:
     """Read all rows from the Favorites sheet and return as {username: {gid: {...}}}.
     Results are cached in session_state so the UI stays snappy; pass force=True to re-read."""
-    if not force and st.session_state.get("favorites_cache"):
+    if not force and st.session_state.get("favorites_cache") is not None:
         return st.session_state.favorites_cache
     try:
         conn = _get_conn()
@@ -181,10 +181,12 @@ def load_favorites(force: bool = False) -> dict:
                 "description": str(row.get("description","")),
             }
         st.session_state.favorites_cache = favs
-        # Sync the instant set too
-        user = st.session_state.get("username", "")
-        if user and user in favs:
-            st.session_state.fav_ids_local = set(favs[user].keys())
+        # Seed the instant set ONCE per session; never overwrite it afterwards
+        # (toggle_favorite is the only thing allowed to mutate it after seeding)
+        if not st.session_state.get("fav_ids_seeded", False):
+            user = st.session_state.get("username", "")
+            st.session_state.fav_ids_local = set(favs.get(user, {}).keys())
+            st.session_state.fav_ids_seeded = True
         return favs
     except Exception:
         st.session_state.favorites_cache = {}
@@ -210,8 +212,9 @@ def save_favorites(favs: dict):
     df   = pd.DataFrame(rows, columns=["username","game_id","name","thumbnail","year","players","publisher","mechanics","description"])
     conn = _get_conn()
     conn.update(worksheet="Favorites", data=df)
-    # Bust the cache so next load_favorites() re-reads fresh data
-    st.session_state.pop("favorites_cache", None)
+    # NOTE: we deliberately do NOT bust favorites_cache here — toggle_favorite
+    # already updated it in session state, and re-reading from Sheets immediately
+    # after a write can return stale data and clobber the user's action.
 
 def toggle_favorite(username: str, game: dict):
     favs      = load_favorites()
@@ -379,6 +382,7 @@ if "expansion_map"    not in st.session_state: st.session_state.expansion_map   
 if "availability_map"  not in st.session_state: st.session_state.availability_map = {}
 if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = {}
 if "fav_ids_local"     not in st.session_state: st.session_state.fav_ids_local    = set()
+if "fav_ids_seeded"    not in st.session_state: st.session_state.fav_ids_seeded   = False
 
 # ── Login gate ────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
@@ -602,11 +606,8 @@ with tab_browse:
 
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
-        # Apply filters — use instant local set for button labels, Sheets cache for data
-        user_favs = get_user_favorites(st.session_state.username)
-        # Seed local set if empty (e.g. first load)
-        if not st.session_state.fav_ids_local and user_favs:
-            st.session_state.fav_ids_local = set(user_favs.keys())
+        # Trigger initial favorites load (seeds fav_ids_local once via load_favorites)
+        get_user_favorites(st.session_state.username)
         fav_ids = st.session_state.fav_ids_local
 
 
@@ -671,7 +672,10 @@ with tab_browse:
 # ── Favorites tab ─────────────────────────────────────────────────────────────
 with tab_favs:
     user_favs = get_user_favorites(st.session_state.username)
-    if not user_favs:
+    # Filter to only games still in the live local set (reflects instant removes)
+    fav_ids   = st.session_state.fav_ids_local
+    fav_items = [(gid, g) for gid, g in user_favs.items() if gid in fav_ids]
+    if not fav_items:
         st.markdown("""
         <div style="text-align:center;padding:4rem 2rem;color:var(--muted);">
             <div style="font-size:4rem;margin-bottom:1rem;">⭐</div>
@@ -680,8 +684,6 @@ with tab_favs:
         </div>
         """, unsafe_allow_html=True)
     else:
-        fav_ids   = st.session_state.fav_ids_local or set(user_favs.keys())
-        fav_items = list(user_favs.items())  # snapshot so removal of last item doesn't crash iteration
         st.markdown(
             f"### ⭐ {st.session_state.username}'s Favorites &nbsp;"
             f"<span style='color:var(--muted);font-size:0.9rem;font-family:DM Sans,sans-serif;font-weight:400;'>"
