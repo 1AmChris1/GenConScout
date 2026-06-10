@@ -1,0 +1,43 @@
+name: Update GenCon CSV
+
+# Runs once a day at 08:00 UTC, and can also be triggered manually
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # allows the action to commit the updated CSV back to the repo
+
+jobs:
+  update-csv:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch latest GenCon CSV
+        env:
+          BGG_API_KEY: ${{ secrets.BGG_API_KEY }}
+        run: python3 update_gencon_csv.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain Gencon.csv)" ]]; then
+            git add Gencon.csv
+            git commit -m "Auto-update Gencon.csv ($(date -u +%Y-%m-%d))"
+            git push
+            echo "Pushed updated Gencon.csv"
+          else
+            echo "No changes to Gencon.csv"
+          fi
