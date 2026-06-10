@@ -365,7 +365,7 @@ def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, sh
     expansion_badge = '<span class="badge badge-expansion">Expansion</span>'              if expansion_map.get(g["id"]) else ""
     booth = location_map.get(g["id"])
     map_link = (
-        f'<a href="https://www.gencon.com/map?lt=7.27529233637217&lg=25.55419921875&z=4&f=1&c=26&s={booth}" '
+        f'<a href="https://www.gencon.com/map?s={booth}" '
         f'target="_blank" class="badge badge-map">📍 Booth {booth}</a>'
     ) if booth else ""
     mech_tags_html = ""
