@@ -3,6 +3,7 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 import hashlib, json, os, re, io
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(
     page_title="GenCon Game Scout",
@@ -136,9 +137,6 @@ h1,h2,h3 { font-family: 'Bebas Neue', sans-serif !important; letter-spacing: 2px
 </style>
 """, unsafe_allow_html=True)
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-FAVORITES_FILE = "favorites.json"
-
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 def _hash(password: str) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode(), b"gencon-scout-salt", 260_000).hex()
@@ -148,19 +146,61 @@ def check_credentials(username: str, password: str) -> bool:
     stored = users.get(username)
     return bool(stored and _hash(password) == stored)
 
-# ── Favorites helpers ─────────────────────────────────────────────────────────
+# ── Favorites helpers (Google Sheets backend) ────────────────────────────────
+def _get_conn():
+    return st.connection("gsheets", type=GSheetsConnection)
+
 def load_favorites() -> dict:
-    if os.path.exists(FAVORITES_FILE):
-        try:
-            with open(FAVORITES_FILE) as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    """Read all rows from the Favorites sheet and return as {username: {gid: {...}}}."""
+    try:
+        conn = _get_conn()
+        df   = conn.read(worksheet="Favorites", ttl=0)
+        favs = {}
+        for _, row in df.iterrows():
+            user = str(row.get("username","")).strip()
+            gid  = str(row.get("game_id","")).strip()
+            if not user or not gid:
+                continue
+            if user not in favs:
+                favs[user] = {}
+            try:
+                mechanics = json.loads(row.get("mechanics","[]") or "[]")
+            except Exception:
+                mechanics = []
+            favs[user][gid] = {
+                "id":          gid,
+                "name":        str(row.get("name","")),
+                "thumbnail":   str(row.get("thumbnail","")),
+                "year":        str(row.get("year","?")),
+                "players":     str(row.get("players","")),
+                "publisher":   str(row.get("publisher","")),
+                "mechanics":   mechanics,
+                "description": str(row.get("description","")),
+            }
+        return favs
+    except Exception:
+        return {}
 
 def save_favorites(favs: dict):
-    with open(FAVORITES_FILE, "w") as f:
-        json.dump(favs, f)
+    """Write entire favorites dict back to the sheet."""
+    rows = []
+    for username, games in favs.items():
+        for gid, g in games.items():
+            rows.append({
+                "username":    username,
+                "game_id":     gid,
+                "name":        g.get("name",""),
+                "thumbnail":   g.get("thumbnail",""),
+                "year":        g.get("year","?"),
+                "players":     g.get("players",""),
+                "publisher":   g.get("publisher",""),
+                "mechanics":   json.dumps(g.get("mechanics",[])),
+                "description": g.get("description",""),
+            })
+    import pandas as pd
+    df   = pd.DataFrame(rows, columns=["username","game_id","name","thumbnail","year","players","publisher","mechanics","description"])
+    conn = _get_conn()
+    conn.update(worksheet="Favorites", data=df)
 
 def toggle_favorite(username: str, game: dict):
     favs      = load_favorites()
@@ -171,13 +211,13 @@ def toggle_favorite(username: str, game: dict):
     else:
         user_favs[gid] = {
             "id":          gid,
-            "name":        game["name"],
-            "thumbnail":   game.get("thumbnail", ""),
-            "year":        game.get("year", "?"),
-            "players":     game.get("players", ""),
-            "publisher":   game.get("publisher", ""),
-            "mechanics":   game.get("mechanics", []),
-            "description": game.get("description", ""),
+            "name":        game.get("name",""),
+            "thumbnail":   game.get("thumbnail",""),
+            "year":        game.get("year","?"),
+            "players":     game.get("players",""),
+            "publisher":   game.get("publisher",""),
+            "mechanics":   game.get("mechanics",[]),
+            "description": game.get("description",""),
         }
     favs[username] = user_favs
     save_favorites(favs)
