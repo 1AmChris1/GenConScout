@@ -679,12 +679,13 @@ with tab_favs:
         </div>
         """, unsafe_allow_html=True)
     else:
-        fav_ids = st.session_state.fav_ids_local or set(user_favs.keys())
+        fav_ids   = st.session_state.fav_ids_local or set(user_favs.keys())
+        fav_items = list(user_favs.items())  # snapshot so removal of last item doesn't crash iteration
         st.markdown(
             f"### ⭐ {st.session_state.username}'s Favorites &nbsp;"
             f"<span style='color:var(--muted);font-size:0.9rem;font-family:DM Sans,sans-serif;font-weight:400;'>"
-            f"{len(user_favs)} games</span>",
+            f"{len(fav_items)} games</span>",
             unsafe_allow_html=True,
         )
-        for gid, g in user_favs.items():
+        for gid, g in fav_items:
             render_game_card(g, fav_ids, {}, {}, show_star=False, show_remove=True)
