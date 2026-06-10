@@ -181,6 +181,10 @@ def load_favorites(force: bool = False) -> dict:
                 "description": str(row.get("description","")),
             }
         st.session_state.favorites_cache = favs
+        # Sync the instant set too
+        user = st.session_state.get("username", "")
+        if user and user in favs:
+            st.session_state.fav_ids_local = set(favs[user].keys())
         return favs
     except Exception:
         st.session_state.favorites_cache = {}
@@ -229,6 +233,11 @@ def toggle_favorite(username: str, game: dict):
     favs[username] = user_favs
     # Update local cache immediately so the button label flips before rerun
     st.session_state.favorites_cache = favs
+    # Update the instant fav_ids set so button label flips without waiting for Sheets
+    if gid in st.session_state.fav_ids_local:
+        st.session_state.fav_ids_local.discard(gid)
+    else:
+        st.session_state.fav_ids_local.add(gid)
     save_favorites(favs)
 
 def get_user_favorites(username: str) -> dict:
@@ -374,6 +383,7 @@ if "location_map"     not in st.session_state: st.session_state.location_map    
 if "expansion_map"    not in st.session_state: st.session_state.expansion_map    = {}
 if "availability_map"  not in st.session_state: st.session_state.availability_map = {}
 if "favorites_cache"   not in st.session_state: st.session_state.favorites_cache  = {}
+if "fav_ids_local"     not in st.session_state: st.session_state.fav_ids_local    = set()
 
 # ── Login gate ────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
@@ -597,9 +607,12 @@ with tab_browse:
 
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
-        # Apply filters — use cached favorites for instant button label update
+        # Apply filters — use instant local set for button labels, Sheets cache for data
         user_favs = get_user_favorites(st.session_state.username)
-        fav_ids   = set(user_favs.keys())
+        # Seed local set if empty (e.g. first load)
+        if not st.session_state.fav_ids_local and user_favs:
+            st.session_state.fav_ids_local = set(user_favs.keys())
+        fav_ids = st.session_state.fav_ids_local
 
 
         if search:
@@ -672,7 +685,7 @@ with tab_favs:
         </div>
         """, unsafe_allow_html=True)
     else:
-        fav_ids = set(user_favs.keys())
+        fav_ids = st.session_state.fav_ids_local or set(user_favs.keys())
         st.markdown(
             f"### ⭐ {st.session_state.username}'s Favorites &nbsp;"
             f"<span style='color:var(--muted);font-size:0.9rem;font-family:DM Sans,sans-serif;font-weight:400;'>"
