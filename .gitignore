@@ -1,5 +1,6 @@
 .streamlit/secrets.toml
 bgg_cache.json
+booth_cache.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

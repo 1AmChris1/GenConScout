@@ -340,6 +340,60 @@ def fetch_game_details(game_ids: list, api_key: str = "") -> dict:
 
     return games
 
+# ── GenCon exhibit-hall map lookup (local JSON cache, never expires) ─────────
+# gencon.com/map's "s" param is an internal map-feature id, not the printed
+# booth number — this hits the same public search API their map's search box
+# uses (GET /api/geo_elements/search?q=...) to resolve a booth number to the
+# real "s"/lat/lng/floor/zoom deep-link URL, then caches the result.
+GENCON_CONVENTION_ID = 27  # Gen Con Indy 2026 map id; update each year alongside PREVIEW_ID in update_gencon_csv.py
+BOOTH_CACHE_PATH = "booth_cache.json"
+
+def load_booth_cache() -> dict:
+    try:
+        with open(BOOTH_CACHE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def save_booth_cache(cache: dict):
+    try:
+        with open(BOOTH_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass  # caching is a perf optimization, not required for correctness
+
+def get_booth_cache() -> dict:
+    if "booth_cache" not in st.session_state:
+        st.session_state.booth_cache = load_booth_cache()
+    return st.session_state.booth_cache
+
+def lookup_booth_map_url(booth_num: str) -> str:
+    """Resolve a booth number to a real gencon.com/map deep-link URL. Returns ""
+    if no match is found or the lookup fails (caller should fall back to the
+    generic map link in that case)."""
+    cache = get_booth_cache()
+    if booth_num in cache:
+        return cache[booth_num]
+    url = ""
+    try:
+        resp = requests.get(
+            "https://www.gencon.com/api/geo_elements/search",
+            params={"q": booth_num, "convention_id": GENCON_CONVENTION_ID},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        for entry in resp.json():
+            src = entry.get("_source", {})
+            if src.get("filtered_category") == "Exhibitors" and src.get("booth_num") == booth_num:
+                url = "https://www.gencon.com" + src["map_location"]
+                break
+    except Exception:
+        url = ""
+    cache[booth_num] = url
+    save_booth_cache(cache)
+    return url
+
 def parse_list_id(raw: str):
     raw = raw.strip()
     m = re.search(r'/(?:geeklist|geekpreview)/(\d+)', raw)
@@ -407,8 +461,9 @@ def render_game_card(g, fav_ids, expansion_map, location_map, show_star=True, sh
     pub_badge       = f'<span class="badge badge-publisher">🏢 {g["publisher"]}</span>' if g.get("publisher") else ""
     expansion_badge = '<span class="badge badge-expansion">Expansion</span>'              if expansion_map.get(g["id"]) else ""
     booth = location_map.get(g["id"])
+    map_url = (lookup_booth_map_url(booth) or "https://www.gencon.com/map") if booth else ""
     map_link = (
-        f'<a href="https://www.gencon.com/map?s={booth}" '
+        f'<a href="{map_url}" '
         f'target="_blank" class="badge badge-map">📍 Booth {booth}</a>'
     ) if booth else ""
     mech_tags_html = ""
