@@ -270,10 +270,45 @@ def fetch_geeklist(list_id: int, api_key: str = "") -> dict:
     ]
     return {"title": title, "item_ids": ids}
 
+# ── BGG game-details cache (local JSON, never expires) ───────────────────────
+BGG_CACHE_PATH = "bgg_cache.json"
+
+def load_bgg_cache() -> dict:
+    """Read bgg_cache.json from the repo root. Returns {} on missing/corrupt file."""
+    try:
+        with open(BGG_CACHE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def save_bgg_cache(cache: dict):
+    """Write the full cache dict back to disk as JSON."""
+    try:
+        with open(BGG_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass  # caching is a perf optimization, not required for correctness
+
+def get_bgg_cache() -> dict:
+    """Session-cached handle to the on-disk BGG cache; loads from disk once per session."""
+    if "bgg_cache" not in st.session_state:
+        st.session_state.bgg_cache = load_bgg_cache()
+    return st.session_state.bgg_cache
+
 def fetch_game_details(game_ids: list, api_key: str = "") -> dict:
+    cache = get_bgg_cache()
     games = {}
-    for i in range(0, len(game_ids), 20):
-        chunk = game_ids[i : i + 20]
+    uncached_ids = []
+    for gid in game_ids:
+        if gid in cache:
+            games[gid] = cache[gid]
+        else:
+            uncached_ids.append(gid)
+
+    fetched_count = 0
+    for i in range(0, len(uncached_ids), 20):
+        chunk = uncached_ids[i : i + 20]
         root  = bgg_get(f"https://boardgamegeek.com/xmlapi2/thing?id={','.join(chunk)}&stats=1", api_key=api_key)
         for item in root.findall("item"):
             gid     = item.get("id")
@@ -290,11 +325,19 @@ def fetch_game_details(game_ids: list, api_key: str = "") -> dict:
             players   = f"{mn}–{mx}" if mn != mx else mn
             mechanics = [l.get("value","") for l in item.findall("link[@type='boardgamemechanic']") if l.get("value")]
             pubs      = [l.get("value","") for l in item.findall("link[@type='boardgamepublisher']") if l.get("value")]
-            games[gid] = {
+            game = {
                 "id": gid, "name": name, "thumbnail": thumb,
                 "description": desc, "year": year, "players": players,
                 "mechanics": mechanics, "publisher": pubs[0] if pubs else "",
             }
+            games[gid] = game
+            cache[gid] = game
+            fetched_count += 1
+        save_bgg_cache(cache)  # persist after each chunk so partial progress survives a later failure
+
+    if uncached_ids:
+        st.toast(f"BGG cache: {len(game_ids) - len(uncached_ids)} cached, {fetched_count} fetched", icon="💾")
+
     return games
 
 def parse_list_id(raw: str):
